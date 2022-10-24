@@ -22,7 +22,7 @@ fn main() {
     let mut canvas = window.into_canvas().build().unwrap();
 
     let mut scale: f64 = 200.0;
-    let mut position: (i32, i32) = (SCREEN_SIZE.0 as i32 / 2, SCREEN_SIZE.1 as i32);
+    let mut position: (i32, i32) = (SCREEN_SIZE.0 as i32 / 2, SCREEN_SIZE.1 as i32 / 2);
 
     draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
     canvas.present();
@@ -36,9 +36,9 @@ fn main() {
                 },
                 Event::MouseWheel { y, .. } => {
                     if y > 0 {
-                        scale *= 1.5;
+                        scale *= 1.2;
                     } else {
-                        scale *= 1.0 / 1.5;
+                        scale *= 1.0 / 1.2;
                     }
                     draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
                     canvas.present();
@@ -60,7 +60,7 @@ fn main() {
 fn z(n: i32, c: Complex64) -> i32 {
     let mut z = Complex64::from(0.0);
     for i in 0..n {
-        if z.norm() > 2.0 {
+        if z.norm_sqr() > 4.0 {
             return i
         }
         z = (z * z) + c;
@@ -70,8 +70,8 @@ fn z(n: i32, c: Complex64) -> i32 {
 
 fn draw_mandelbrot(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, position: (i32, i32), scale: f64, colormap: [[f32; 3]; 256]) -> () {
     let start_time = Instant::now();
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
+    // canvas.set_draw_color(Color::RGB(0, 0, 0));
+    // canvas.clear();
     let n_threads = thread::available_parallelism().unwrap().get() as u32;
     let mut thread_handles: Vec<thread::JoinHandle<Vec<[f64; SCREEN_SIZE.1 as usize]>>> = Vec::with_capacity(n_threads as usize);
     for i in 0..n_threads {
@@ -84,8 +84,8 @@ fn draw_mandelbrot(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, posit
                         column[y as usize] = z(
                             N_ITERATIONS, 
                             Complex64::new(
-                                (((x + (i * (SCREEN_SIZE.0 / n_threads))) as i32 - position.0) as f64) / scale, 
-                                ((y as i32 - position.1 / 2) as f64) / scale
+                                (((x + (i * (SCREEN_SIZE.0 / n_threads))) as f64) / scale) - (position.0 as f64 / scale), 
+                                (y as f64 / scale) - (position.1 as f64 / scale)
                             )
                         ) as f64 / N_ITERATIONS as f64;
                     }

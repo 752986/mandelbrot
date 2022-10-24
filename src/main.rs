@@ -2,6 +2,8 @@ use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use num_complex::Complex64;
+use std::thread;
+use std::time::Instant;
 mod colormaps;
 
 const SCREEN_SIZE: (u32, u32) = (1200, 900);
@@ -20,7 +22,7 @@ fn main() {
     let mut canvas = window.into_canvas().build().unwrap();
 
     let mut scale: f64 = 200.0;
-    let position: (i32, i32) = (SCREEN_SIZE.0 as i32 / 2, SCREEN_SIZE.1 as i32);
+    let mut position: (i32, i32) = (SCREEN_SIZE.0 as i32 / 2, SCREEN_SIZE.1 as i32);
 
     draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
     canvas.present();
@@ -40,6 +42,14 @@ fn main() {
                     }
                     draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
                     canvas.present();
+                },
+                Event::MouseMotion { mousestate, xrel, yrel, .. } => {
+                    if mousestate.left() {
+                        position.0 += xrel;
+                        position.1 += yrel;
+                        draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
+                        canvas.present();
+                    }
                 }
                 _ => {}
             }
@@ -55,29 +65,55 @@ fn z(n: i32, c: Complex64) -> i32 {
         }
         z = (z * z) + c;
     }
-    return 0
+    return 2
 }
 
 fn draw_mandelbrot(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, position: (i32, i32), scale: f64, colormap: [[f32; 3]; 256]) -> () {
+    let start_time = Instant::now();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
-    for x in 0..canvas.output_size().unwrap().0 {
-        for y in 0..canvas.output_size().unwrap().1 {
-            canvas.set_draw_color(
-                color_from_colormap(
-                    z(
-                        N_ITERATIONS, 
-                        Complex64::new(
-                            ((x as i32 - position.0) as f64) / scale, 
-                            ((y as i32 - position.1 / 2) as f64) / scale
-                        )
-                    ) as f64 / N_ITERATIONS as f64,
-                    colormap
-                )
-            );
-            canvas.draw_point((x as i32, y as i32)).unwrap();
+    let n_threads = thread::available_parallelism().unwrap().get() as u32;
+    let mut thread_handles: Vec<thread::JoinHandle<Vec<[f64; SCREEN_SIZE.1 as usize]>>> = Vec::with_capacity(n_threads as usize);
+    for i in 0..n_threads {
+        thread_handles.push(
+            thread::spawn(move || {
+                let mut output: Vec<[f64; SCREEN_SIZE.1 as usize]> = Vec::with_capacity((SCREEN_SIZE.0 / n_threads) as usize);
+                for x in 0..SCREEN_SIZE.0 / n_threads {
+                    let mut column = [0.0; SCREEN_SIZE.1 as usize];
+                    for y in 0..SCREEN_SIZE.1 {
+                        column[y as usize] = z(
+                            N_ITERATIONS, 
+                            Complex64::new(
+                                (((x + (i * (SCREEN_SIZE.0 / n_threads))) as i32 - position.0) as f64) / scale, 
+                                ((y as i32 - position.1 / 2) as f64) / scale
+                            )
+                        ) as f64 / N_ITERATIONS as f64;
+                    }
+                    output.push(column);
+                }
+                return output
+            })
+        );
+    }
+    for i in 0..thread_handles.len() {
+        let t = thread_handles.pop().unwrap();
+        let thread_result = t.join().unwrap();
+        let mut prev_c = 0.0;
+        canvas.set_draw_color(color_from_colormap(0.0, colormap));
+        for (x, column) in thread_result.iter().enumerate() {
+            for (y, c) in column.iter().enumerate() {
+                if *c != prev_c {
+                    canvas.set_draw_color(color_from_colormap(*c, colormap));
+                }
+                canvas.draw_point(((x + ((n_threads as usize - i - 1) * ((SCREEN_SIZE.0 / n_threads) as usize))) as i32, y as i32)).unwrap();
+                prev_c = *c;
+            }
         }
     }
+    
+    let duration = start_time.elapsed();
+    println!("took {} secs to render", duration.as_secs_f64());
+
 }
 
 fn color_from_colormap(factor: f64, colormap: [[f32; 3]; 256]) -> Color{

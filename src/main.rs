@@ -32,7 +32,7 @@ fn main() {
     let mut scale: f64 = 200.0;
     let mut position: (i32, i32) = (0, 0);
 
-    draw_mandelbrot(&mut texture, position, scale, colormaps::MAGMA_COLORMAP);
+    draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
     canvas.present();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -52,14 +52,14 @@ fn main() {
                         position.0 = (position.0 as f64 / 1.2) as i32;
                         position.1 = (position.1 as f64 / 1.2) as i32;
                     }
-                    draw_mandelbrot(&mut texture, position, scale, colormaps::MAGMA_COLORMAP);
+                    draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
                     canvas.present();
                 },
                 Event::MouseMotion { mousestate, xrel, yrel, .. } => {
                     if mousestate.left() {
                         position.0 += xrel;
                         position.1 += yrel;
-                        draw_mandelbrot(&mut texture, position, scale, colormaps::MAGMA_COLORMAP);
+                        draw_mandelbrot(&mut canvas, position, scale, colormaps::MAGMA_COLORMAP);
                         canvas.present();
                     }
                 }
@@ -80,7 +80,7 @@ fn z(n: i32, c: Complex64) -> i32 {
     return 2
 }
 
-fn draw_mandelbrot(texture: &mut Texture/*canvas: &mut sdl2::render::Canvas<sdl2::video::Window>*/, position: (i32, i32), scale: f64, colormap: [[f32; 3]; 256]) -> () {
+fn draw_mandelbrot(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, position: (i32, i32), scale: f64, colormap: [[f32; 3]; 256]) -> () {
     let start_time = Instant::now();
     // canvas.set_draw_color(Color::RGB(0, 0, 0));
     // canvas.clear();
@@ -110,24 +110,24 @@ fn draw_mandelbrot(texture: &mut Texture/*canvas: &mut sdl2::render::Canvas<sdl2
     for i in 0..thread_handles.len() {
         let t = thread_handles.pop().unwrap();
         let thread_result = t.join().unwrap();
-        // let mut prev_c = 0.0;
-        // canvas.set_draw_color(color_from_colormap(0.0, colormap));
+        let mut prev_c = 0.0;
+        canvas.set_draw_color(color_from_colormap(0.0, colormap));
         let mut data = [0u8; (SCREEN_SIZE.0 * SCREEN_SIZE.1) as usize * 3];
         for (x, column) in thread_result.iter().enumerate() {
             for (y, c) in column.iter().enumerate() {
-                let color = bytes_from_colormap(*c, colormap);
-                let index = (((x as i32 + ((n_threads - i as i32 - 1) * (SCREEN_SIZE.0 / n_threads))) as usize) + (y * SCREEN_SIZE.0 as usize)) * 3;
-                data[index] = color[0];
-                data[index + 1] = color[1];
-                data[index + 2] = color[2];
-                // if *c != prev_c {
-                //     canvas.set_draw_color(color_from_colormap(*c, colormap));
-                // }
-                // canvas.draw_point(((x as i32 + ((n_threads - i as i32 - 1) * (SCREEN_SIZE.0 / n_threads))) as i32, y as i32)).unwrap();
-                // prev_c = *c;
+                // let color = bytes_from_colormap(*c, colormap);
+                // let index = (((x as i32 + ((n_threads - i as i32 - 1) * (SCREEN_SIZE.0 / n_threads))) as usize) + (y * SCREEN_SIZE.0 as usize)) * 3;
+                // data[index] = color[0];
+                // data[index + 1] = color[1];
+                // data[index + 2] = color[2];
+                if *c != prev_c {
+                    canvas.set_draw_color(color_from_colormap(*c, colormap));
+                }
+                canvas.draw_point(((x as i32 + ((n_threads - i as i32 - 1) * (SCREEN_SIZE.0 / n_threads))) as i32, y as i32)).unwrap();
+                prev_c = *c;
             }
         }
-        texture.update(None, &data, SCREEN_SIZE.0 as usize).unwrap();
+        // texture.update(None, &data, SCREEN_SIZE.0 as usize).unwrap();
     }
     
     let duration = start_time.elapsed();
